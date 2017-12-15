@@ -255,6 +255,10 @@ export class GraphComponent extends BaseChartComponent implements AfterViewInit 
     const index = {};
     this._nodes.map(n => {
       index[n.id] = n;
+
+      n.x = (n.x + Math.random() * 100)
+      n.y = (n.y + Math.random() * 100)
+
       n.options = {
         color: this.colors.getColor(this.groupResultsBy(n)),
         transform: `translate(${(n.x - n.width / 2) || 0}, ${(n.y - n.height / 2) || 0})`
@@ -375,7 +379,6 @@ export class GraphComponent extends BaseChartComponent implements AfterViewInit 
     this.graph.setDefaultEdgeLabel(() => {
       return { /* empty */ };
     });
-
     this._nodes = this.nodes.map(n => {
       return Object.assign({}, n);
     });
@@ -389,10 +392,8 @@ export class GraphComponent extends BaseChartComponent implements AfterViewInit 
     for (const node of this._nodes) {
       node.width = 20;
       node.height = 30;
-
       // update dagre
       this.graph.setNode(node.id, node);
-
       // set view options
       node.options = {
         color: this.colors.getColor(this.groupResultsBy(node)),
@@ -406,7 +407,13 @@ export class GraphComponent extends BaseChartComponent implements AfterViewInit 
     }
 
     requestAnimationFrame(() => this.draw());
-  }
+    setTimeout(() => {
+      for (const node of this._nodes) {
+        this.onCustomPosition(node);
+      }
+    }, 100);
+
+}
 
   /**
    * Calculate the text directions / flipping
@@ -489,6 +496,37 @@ export class GraphComponent extends BaseChartComponent implements AfterViewInit 
     const node = this.draggingNode;
     node.x += event.movementX / this.zoomLevel;
     node.y += event.movementY / this.zoomLevel;
+
+    // move the node
+    const x = (node.x - (node.width / 2));
+    const y = (node.y - (node.height / 2));
+    node.options.transform = `translate(${x}, ${y})`;
+
+    for (const link of this._links) {
+      if (link.target === node.id || link.source === node.id) {
+        const sourceNode = this._nodes.find(n => n.id === link.source);
+        const targetNode = this._nodes.find(n => n.id === link.target);
+
+        // determine new arrow position
+        const dir = sourceNode.y <= targetNode.y ? -1 : 1;
+        const startingPoint = { x: sourceNode.x, y: (sourceNode.y - dir * (sourceNode.height / 2)) };
+        const endingPoint = { x: targetNode.x, y: (targetNode.y + dir * (targetNode.height / 2)) };
+
+        // generate new points
+        link.points = [startingPoint, endingPoint];
+        const line = this.generateLine(link.points);
+        this.calcDominantBaseline(link);
+        link.oldLine = link.line;
+        link.line = line;
+      }
+    }
+
+    this.redrawLines(false);
+  }
+
+  onCustomPosition(node): void {
+    node.x = node.customX;
+    node.y = node.customY;
 
     // move the node
     const x = (node.x - (node.width / 2));
